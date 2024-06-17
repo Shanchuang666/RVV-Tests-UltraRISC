@@ -12,7 +12,7 @@
 	@fgrep -h "##" $(MAKEFILE_LIST) | fgrep -v fgrep | sed -e 's/\\$$//' | sed -e 's/##//'
 
   all:  ## Generate tests.
-  all: compile-stage2
+  all: compile-stage1
 
 ##
 ##Options:
@@ -47,9 +47,11 @@
 SPIKE_INSTALL = $(RISCV)
 OUTPUT = out/v$(VLEN)x$(XLEN)$(MODE)
 OUTPUT_STAGE1 = $(OUTPUT)/tests/stage1/
+OUTPUT_STAGE1_A2 = $(OUTPUT)/tests/stage1_a2/
 OUTPUT_STAGE2 = $(OUTPUT)/tests/stage2/
 OUTPUT_STAGE2_PATCH = $(OUTPUT)/patches/stage2/
 OUTPUT_STAGE1_BIN = $(OUTPUT)/bin/stage1/
+OUTPUT_STAGE1_BIN_A2 = $(OUTPUT)/bin/stage1_a2/
 OUTPUT_STAGE2_BIN = $(OUTPUT)/bin/stage2/
 CONFIGS = configs/
 
@@ -65,6 +67,8 @@ endif
 RISCV_PREFIX = riscv64-unknown-elf-
 RISCV_GCC = $(RISCV_PREFIX)gcc
 RISCV_GCC_OPTS = -static -mcmodel=medany -fvisibility=hidden -nostdlib -nostartfiles -DENTROPY=0xdeadbeef -DLFSR_BITS=9 -fno-tree-loop-distribute-patterns
+RISCV_OBJDUMP = $(RISCV_PREFIX)objdump
+RISCV_OBJCOPY = $(RISCV_PREFIX)objcopy
 
 ifeq ($(TEST_MODE), self)
 STAGE2_GCC_OPTS =
@@ -78,9 +82,11 @@ PK =
 
 ifeq ($(MODE),machine)
 ENV = env/riscv-test-env/p
+ENV_A2 = env/riscv-test-env/p_a2
 endif
 ifeq ($(MODE),user)
 ENV = env/ps
+ENV_A2 = env/ps_a2
 PK = $(shell which pk)
 ifeq (, $(PK))
 $(error "No pk found, please install it to your path.")
@@ -88,6 +94,7 @@ endif
 endif
 ifeq ($(MODE),virtual)
 ENV = env/riscv-test-env/v
+ENV_A2 = env/riscv-test-env/v_a2
 ENV_CSRCS = env/riscv-test-env/v/vm.c env/riscv-test-env/v/string.c env/riscv-test-env/v/entry.S
 endif
 
@@ -115,10 +122,19 @@ include Makefrag
 
 compile-stage1: generate-stage1
 	@mkdir -p ${OUTPUT_STAGE1_BIN}
+	@mkdir -p ${OUTPUT_STAGE1_A2}
+	@mkdir -p ${OUTPUT_STAGE1_BIN_A2}
 	$(MAKE) $(tests)
 
 $(tests): %: ${OUTPUT_STAGE1}%.S
 	$(RISCV_GCC) -march=${MARCH} -mabi=${MABI} $(RISCV_GCC_OPTS) -I$(ENV) -Imacros/general -T$(ENV)/link.ld $(ENV_CSRCS) $< -o ${OUTPUT_STAGE1_BIN}$@
+
+	sed -r 's/\.word 0x[0-9]+00b/ /g' $< > ${OUTPUT_STAGE1_A2}$@.S
+	$(RISCV_GCC) -march=${MARCH} -mabi=${MABI} $(RISCV_GCC_OPTS) -I$(ENV_A2) -Imacros/general -T$(ENV_A2)/link.ld $(ENV_CSRCS) ${OUTPUT_STAGE1_A2}$@.S -o ${OUTPUT_STAGE1_BIN_A2}$@
+	$(RISCV_OBJCOPY) -S --set-section-flags .bss=alloc,contents -O binary ${OUTPUT_STAGE1_BIN_A2}${shell basename $@ .stage1} ${OUTPUT_STAGE1_BIN_A2}$@.bin
+	$(RISCV_OBJDUMP) -S -d ${OUTPUT_STAGE1_BIN_A2}${shell basename $@ .stage1} > ${OUTPUT_STAGE1_BIN_A2}$@.txt
+	$(RISCV_OBJDUMP) -S -xDS ${OUTPUT_STAGE1_BIN_A2}${shell basename $@ .stage1} > ${OUTPUT_STAGE1_BIN_A2}$@.asm
+
 
 tests_patch = $(addsuffix .patch, $(tests))
 
