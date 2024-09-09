@@ -1,0 +1,30 @@
+#!/bin/bash  
+  
+echo "start shell progrem!"  
+
+# 设置目标文件夹路径  
+TARGET_DIR="./out/v256*/bin/stage1"  
+  
+# 遍历目标文件夹及其所有子文件夹下的所有文件  
+find "$TARGET_DIR" -type f ! -name "*.elf" | while read -r file; do  
+    # 获取文件所在的目录  
+    dir=$(dirname "$file")  
+      
+    # 获取文件名（不包含路径和后缀）  
+    basename_noext="${file##*/}"  
+    basename_noext="${basename_noext%.*}"  
+      
+    # 构造新的文件名（添加.elf后缀）  
+    new_filename="${dir}/${basename_noext}.elf"  
+      
+    # 检查新的文件名是否已存在  
+    if [ -e "$new_filename" ]; then  
+        echo "Warning: File '$new_filename' already exists, skipping."  
+    else  
+        # 重命名文件（添加.elf后缀）  
+        mv "$file" "$new_filename"  
+        echo "Renamed '$file' to '$new_filename'"  
+    fi  
+done  
+  
+echo "All eligible files have been renamed with .elf extension."
